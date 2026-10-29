@@ -9,14 +9,14 @@ import requests
 app = Flask(__name__)
 channel_secret = os.getenv('LINE_CHANNEL_SECRET', '').strip()
 channel_access_token = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '').strip()
-groq_key = os.getenv('GROQ_API_KEY', '').strip()
+gemini_key = os.getenv('GEMINI_API_KEY', '').strip()
 
 configuration = Configuration(access_token=channel_access_token)
 handler = WebhookHandler(channel_secret)
 
 @app.route("/")
 def home():
-    return f"Bot OK! GROQ_KEY exists={bool(groq_key)} len={len(groq_key)}"
+    return f"Bot Gemini OK! Key={bool(gemini_key)}"
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -29,46 +29,22 @@ def callback():
     return 'OK'
 
 def ask_ai(user_text):
-    if not groq_key:
-        return "ยังไม่เจอ GROQ_API_KEY ใน Render ครับ"
-    
-    # เช็คว่า Key ขึ้นต้นถูกไหม
-    if not groq_key.startswith("gsk_"):
-        return f"Key ที่ใส่มาไม่ขึ้นต้นด้วย gsk_ นะครับ ตอนนี้ขึ้นต้นด้วย {groq_key[:10]}... ไปก็อปใหม่จาก console.groq.com/keys นะครับ"
-
-    models = ["llama-3.1-8b-instant", "llama3-70b-8192"]
-    
-    last_error = ""
-    for model_name in models:
-        try:
-            r = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={
-                    "model": model_name,
-                    "messages": [
-                        {"role": "system", "content": "คุณคือผู้ช่วย_789 ตอบสั้นเป็นกันเอง"},
-                        {"role": "user", "content": user_text}
-                    ]
-                },
-                timeout=25
-            )
-            data = r.json()
-            print(f"MODEL {model_name} STATUS {r.status_code} DATA {data}")
-            
-            if 'choices' in data and len(data['choices']) > 0:
-                return data['choices'][0]['message']['content']
-            
-            # ถ้าไม่มี choices ให้เก็บ error ไว้บอก user
-            last_error = str(data)
-            
-        except Exception as e:
-            print(f"EXCEPTION {model_name}: {e}")
-            last_error = str(e)
-            continue
-
-    # ถ้าลองหมดแล้วยังพัง จะบอกสาเหตุจริงๆ
-    return f"Groq ตอบมาว่า: {last_error}\n\nลองไปเช็คที่ console.groq.com ว่า Key หมดอายุไหมครับ"
+    if not gemini_key:
+        return "ยังไม่เจอ GEMINI_API_KEY ใน Render ครับ ไปเอาฟรีที่ aistudio.google.com/app/apikey"
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+        payload = {
+            "contents": [{"parts": [{"text": f"คุณคือผู้ช่วยส่วนตัวชื่อ ผู้ช่วย_789 พูดไทยเป็นกันเอง ตอบสั้นกระชับ ช่วยเรื่องบิตคอย ทอง หุ้น ข่าว AI ธุรกิจ: {user_text}"}]}]
+        }
+        r = requests.post(url, json=payload, timeout=20)
+        data = r.json()
+        print(f"Gemini data: {data}")
+        if 'candidates' in data:
+            return data['candidates'][0]['content']['parts'][0]['text']
+        return f"Gemini ตอบว่า: {data}"
+    except Exception as e:
+        print(f"Gemini error: {e}")
+        return f"Error: {e}"
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
