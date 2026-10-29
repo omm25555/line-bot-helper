@@ -7,16 +7,16 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent
 import requests
 
 app = Flask(__name__)
-
 channel_secret = os.getenv('LINE_CHANNEL_SECRET', '')
 channel_access_token = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '')
+groq_key = os.getenv('GROQ_API_KEY', '')
 
 configuration = Configuration(access_token=channel_access_token)
 handler = WebhookHandler(channel_secret)
 
 @app.route("/")
 def home():
-    return "LINE Bot is running!"
+    return "LINE Bot Meta AI is running!"
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -28,47 +28,35 @@ def callback():
         abort(400)
     return 'OK'
 
-def get_price_and_weather(query):
-    query = query.lower()
+def ask_meta_ai(user_text):
+    if not groq_key:
+        return "ใส่ GROQ_API_KEY ใน Render ก่อนนะครับ แล้วผมจะเป็น 【entity-Meta¦canonical_name=Meta】 AI เต็มตัวเลย"
+
     try:
-        # 1. ราคา Bitcoin / Crypto
-        if "บิตคอย" in query or "bitcoin" in query or "btc" in query:
-            r = requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=thb,usd", timeout=10).json()
-            price_thb = r['bitcoin']['thb']
-            price_usd = r['bitcoin']['usd']
-            return f"ราคาบิตคอยน์ตอนนี้:\n฿{price_thb:,.0f} THB\n${price_usd:,.0f} USD"
-
-        # 2. ราคาทอง
-        if "ทอง" in query:
-            return "ราคาทองวันนี้ (สมาคมค้าทองคำ):\nทองแท่ง 96.5% รับซื้อ ~40,400 ขายออก ~40,500 บาท\n*ราคาอาจเปลี่ยนแปลงระหว่างวันครับ"
-
-        # 3. อากาศ
-        if "อากาศ" in query or "weather" in query:
-            # ใช้ wttr.in ไม่ต้องใช้ API key
-            r = requests.get("https://wttr.in/Bangkok?format=%C+%t+%h", timeout=10).text
-            return f"อากาศกรุงเทพตอนนี้: {r}\nเช็คเพิ่มเติม: wttr.in"
-
-        # 4. อื่นๆ ค้นหาแบบง่าย
-        return f"คุณถามว่า: {query}\n\nตอนนี้บอทค้นหาทั่วไปได้แล้วครับ! ลองถาม 'ราคาบิตคอย', 'ราคาทอง', 'อากาศวันนี้' ดูได้เลย"
-        
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",  # ของ Meta แท้ๆ 100%
+                "messages": [
+                    {"role": "system", "content": "คุณคือ Meta AI ผู้ช่วยส่วนตัวชื่อ ผู้ช่วย_789 พูดไทย เป็นกันเอง ตอบสั้นกระชับ ช่วยเรื่องบิตคอย ทอง หุ้น ข่าว AI ธุรกิจได้"},
+                    {"role": "user", "content": user_text}
+                ]
+            },
+            timeout=20
+        ).json()
+        return r['choices'][0]['message']['content']
     except Exception as e:
-        print(f"Search error: {e}")
-        return f"รับทราบเรื่อง {query} ครับ ตอนนี้ระบบค้นหาติดขัดเล็กน้อย แต่บอทพร้อมทำงานแล้วครับ!"
+        print(e)
+        return f"AI พักครู่นึงครับ: {user_text}"
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
-    user_text = event.message.text
-    reply_text = get_price_and_weather(user_text)
-
+    reply = ask_meta_ai(event.message.text)
     with ApiClient(configuration) as api_client:
-        line_bot_api = MessagingApi(api_client)
-        line_bot_api.reply_message_with_http_info(
-            ReplyMessageRequest(
-                reply_token=event.reply_token,
-                messages=[TextMessage(text=reply_text)]
-            )
+        MessagingApi(api_client).reply_message_with_http_info(
+            ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text=reply)])
         )
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
