@@ -16,7 +16,7 @@ handler = WebhookHandler(channel_secret)
 
 @app.route("/")
 def home():
-    return f"Bot Gemini OK! Key={bool(gemini_key)}"
+    return "Bot OK Gemini 2.5"
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -30,21 +30,22 @@ def callback():
 
 def ask_ai(user_text):
     if not gemini_key:
-        return "ยังไม่เจอ GEMINI_API_KEY ใน Render ครับ ไปเอาฟรีที่ aistudio.google.com/app/apikey"
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-        payload = {
-            "contents": [{"parts": [{"text": f"คุณคือผู้ช่วยส่วนตัวชื่อ ผู้ช่วย_789 พูดไทยเป็นกันเอง ตอบสั้นกระชับ ช่วยเรื่องบิตคอย ทอง หุ้น ข่าว AI ธุรกิจ: {user_text}"}]}]
-        }
-        r = requests.post(url, json=payload, timeout=20)
-        data = r.json()
-        print(f"Gemini data: {data}")
-        if 'candidates' in data:
-            return data['candidates'][0]['content']['parts'][0]['text']
-        return f"Gemini ตอบว่า: {data}"
-    except Exception as e:
-        print(f"Gemini error: {e}")
-        return f"Error: {e}"
+        return "ยังไม่เจอ GEMINI_API_KEY ครับ"
+    # ลองทุกรุ่นที่ฟรีตอนนี้
+    models = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"]
+    for model_name in models:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={gemini_key}"
+            payload = {"contents": [{"parts": [{"text": f"คุณคือผู้ช่วย_789 พูดไทยเป็นกันเอง ตอบสั้นๆ: {user_text}"}]}]}
+            r = requests.post(url, json=payload, timeout=20)
+            data = r.json()
+            print(f"TRY {model_name} -> {data}")
+            if 'candidates' in data:
+                return data['candidates'][0]['content']['parts'][0]['text']
+        except Exception as e:
+            print(f"{model_name} error {e}")
+            continue
+    return f"Gemini ตอบว่า: {data}"
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
