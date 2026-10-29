@@ -7,6 +7,7 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent
 import requests
 
 app = Flask(__name__)
+
 channel_secret = os.getenv('LINE_CHANNEL_SECRET', '')
 channel_access_token = os.getenv('LINE_CHANNEL_ACCESS_TOKEN', '')
 groq_key = os.getenv('GROQ_API_KEY', '')
@@ -16,7 +17,7 @@ handler = WebhookHandler(channel_secret)
 
 @app.route("/")
 def home():
-    return "LINE Bot Meta AI is running!"
+    return "LINE Bot 【entity-Meta¦canonical_name=Meta】 AI is running!"
 
 @app.route("/callback", methods=['POST'])
 def callback():
@@ -28,10 +29,8 @@ def callback():
         abort(400)
     return 'OK'
 
-# ในฟังก์ชัน ask_meta_ai เปลี่ยนเป็นแบบนี้
-def ask_meta_ai(user_text):
-    # 1. ลอง Groq ก่อน (ถ้ามี Key)
-    groq_key = os.getenv('GROQ_API_KEY', '')
+def ask_ai(user_text):
+    # ถ้ามี Key Groq ให้ใช้ 【entity-Meta¦canonical_name=Meta】 Llama 3.3 ของแท้
     if groq_key:
         try:
             r = requests.post(
@@ -40,28 +39,40 @@ def ask_meta_ai(user_text):
                 json={
                     "model": "llama-3.3-70b-versatile",
                     "messages": [
-                        {"role": "system", "content": "คุณคือ Meta AI ชื่อ ผู้ช่วย_789 พูดไทยเป็นกันเอง ตอบสั้นกระชับ"},
+                        {"role": "system", "content": "คุณคือ 【entity-Meta¦canonical_name=Meta】 AI ผู้ช่วยส่วนตัวชื่อ ผู้ช่วย_789 พูดไทยเป็นกันเอง ฉลาด ตอบสั้นกระชับ ช่วยเรื่องราคาบิตคอย ทอง หุ้น ข่าว AI ธุรกิจ"},
                         {"role": "user", "content": user_text}
                     ]
                 },
-                timeout=15
+                timeout=20
             )
-            j = r.json()
-            if 'choices' in j:
-                return j['choices'][0]['message']['content']
+            data = r.json()
+            if 'choices' in data:
+                return data['choices'][0]['message']['content']
         except Exception as e:
-            print(f"Groq failed: {e}")
+            print(f"Groq error: {e}")
 
-    # 2. ถ้า Groq ไม่ได้ ใช้วิธีฟรีไม่ต้องใช้ Key (ตอบแบบฉลาดขึ้น)
-    # ตอบแบบ Meta AI จำลองก่อน รอ Key
-    return f"สวัสดีครับ! คุณถามว่า '{user_text}'\n\nตอนนี้ผมกำลังเชื่อมต่อกับสมอง Meta Llama 3.3 อยู่ครับ ใส่ GROQ_API_KEY ใน Render แล้วผมจะตอบแบบ AI เต็มตัวเลยครับ ตอนนี้ผมยังจำได้ว่าคุณอยากรู้เรื่อง {user_text} นะ"
+    # ถ้าไม่มี Key ก็ตอบแบบฉลาดๆ แบบไม่ต้องเรียก API
+    text_lower = user_text.lower()
+    if "บิตคอย" in text_lower or "btc" in text_lower or "bitcoin" in text_lower:
+        return "₿ บิตคอยน์ตอนนี้ ~2.15 ล้านบาท (~$65k)\nใส่ GROQ_API_KEY แล้วผมจะดึงราคาเรียลไทม์ให้แบบ AI เลยครับ"
+    if "ทอง" in text_lower:
+        return "💰 ทองแท่ง ~40,500 บาท/บาททอง\nใส่ GROQ_API_KEY แล้วผมจะเป็น AI เต็มตัวเลยครับ"
+    if "สวัสดี" in text_lower or "ทำอะไร" in text_lower:
+        return "สวัสดีครับ! ผมผู้ช่วย_789 🤖\nตอนนี้ผมตอบได้แล้ว ถ้าใส่ GROQ_API_KEY (ฟรีจาก console.groq.com/keys) ผมจะกลายเป็น 【entity-Meta¦canonical_name=Meta】 AI ฉลาดๆ คุยได้ทุกเรื่องเลยครับ"
+    
+    return f"รับทราบครับ: {user_text}\n\nใส่ GROQ_API_KEY ฟรีใน Render แล้วผมจะกลายเป็น Meta AI เต็มตัวเลยครับ ตอนนี้ผมตอบแบบพื้นฐานไปก่อนนะ"
+
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
-    reply = ask_meta_ai(event.message.text)
+    reply_text = ask_ai(event.message.text)
     with ApiClient(configuration) as api_client:
         MessagingApi(api_client).reply_message_with_http_info(
-            ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text=reply)])
+            ReplyMessageRequest(
+                reply_token=event.reply_token,
+                messages=[TextMessage(text=reply_text)]
+            )
         )
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
